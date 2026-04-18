@@ -114,16 +114,16 @@
             <span id="scans-left">--</span> SCANS LEFT THIS MONTH<br>
             RENEWS ON: <span id="renew-date">--</span>
         </div>
-        <div id="streak-container" style="position: absolute; top: 15px; left: 15px; z-index: 10; font-family: 'Orbitron'; font-size: 1rem; display: flex; align-items: center; gap: 5px; text-shadow: 0 0 5px #000;">
-            <span id="streak-number">0</span>
-            <span id="streak-fire" style="display: none;">🔥</span>
-        </div>
-        <div style="text-align: right; margin-bottom: 10px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; position: relative; z-index: 10;">
+            <div id="streak-container" style="font-family: 'Orbitron'; font-size: 1rem; display: flex; align-items: center; gap: 5px; text-shadow: 0 0 5px #000;">
+                <span id="streak-number">0</span>
+                <span id="streak-fire" style="display: none;">🔥</span>
+            </div>
             <button id="login-btn" class="login-btn" onclick="handleAuthAction()">LOGIN WITH GOOGLE</button>
         </div>
         <h2 style="text-align: center; color: var(--rotom-red); margin-top: 0; letter-spacing: 2px;">POKÉMON SNAP</h2>
         <div id="scanner-container">
-            <video id="video" autoplay playsinline></video>
+            <video id="video" autoplay playsinline muted></video>
             <div id="scan-line" class="scan-line" style="display:none;"></div>
             
             <div style="position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); width: 80%; z-index: 10; background: rgba(0,0,0,0.5); padding: 5px 15px; border-radius: 20px; display: flex; align-items: center; gap: 10px;">
@@ -338,11 +338,8 @@
             if (!userProfile) return;
             
             const quotaInfo = document.getElementById('quota-info');
-            const scansLeftEl = document.getElementById('scans-left');
-            const renewDateEl = document.getElementById('renew-date');
 
             if (!userProfile.approved) {
-                // Replace the content with the pending message
                 quotaInfo.innerHTML = `
                     <div style="color: var(--rotom-red); font-weight: bold; letter-spacing: 1px;">
                         ACCOUNT PENDING APPROVAL<br>
@@ -350,24 +347,47 @@
                     </div>
                 `;
             } else {
-                // Restore the original structure if they are approved
+                // Flex container to put button on the right
+                // Container uses flex-start to snap text to the left, button remains absolute right
                 quotaInfo.innerHTML = `
-                    <span id="scans-left">--</span> SCANS LEFT THIS MONTH<br>
-                    RENEWS ON: <span id="renew-date">--</span>
+                    <div style="display: flex; justify-content: flex-start; align-items: center; position: relative;">
+                        <div id="quota-text-container" style="text-align: left;">
+                            <span id="scans-left">--</span> SCANS LEFT THIS MONTH<br>
+                            RENEWS ON: <span id="renew-date">--</span>
+                        </div>
+                        <button onclick="sendFeedback()" style="position: absolute; right: 0; background: var(--rotom-blue); color: white; border: none; padding: 5px 10px; border-radius: 4px; font-family: 'Orbitron', sans-serif; font-size: 0.6rem; cursor: pointer;">
+                            FEEDBACK
+                        </button>
+                    </div>
                 `;
                 
                 const scansLeft = userProfile.unlimitedAccess ? "∞" : Math.max(0, 25 - userProfile.scanCount);
                 document.getElementById('scans-left').innerText = scansLeft;
                 
-                // Calculate the NEXT 18th
                 const now = new Date();
                 let nextRenew = new Date(now.getFullYear(), now.getMonth(), 18);
-                
                 if (now >= nextRenew) {
                     nextRenew.setMonth(nextRenew.getMonth() + 1);
                 }
-                
                 document.getElementById('renew-date').innerText = nextRenew.toLocaleDateString();
+            }
+        }
+
+        async function sendFeedback() {
+            const message = prompt("Enter your feedback or report a bug:");
+            if (!message) return;
+
+            try {
+                await db.collection('feedback').add({
+                    uid: auth.currentUser.uid,
+                    email: auth.currentUser.email,
+                    message: message,
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                alert("Feedback sent! Thank you.");
+            } catch (e) {
+                console.error("Feedback error:", e);
+                alert("Failed to send feedback. Please try again later.");
             }
         }
 
@@ -549,8 +569,8 @@
 
         async function init() {
             try {
-                // 1. START CAMERA FIRST (Gets permissions immediately)
-                await startCamera();
+                // 1. START CAMERA FIRST (Removed 'await' so it runs in the background)
+                startCamera();
 
                 // 2. Load the database in the background
                 const res = await fetch('/api/all_pokemon');
@@ -575,27 +595,40 @@
                 }
                 
                 videoStream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { facingMode: "environment" } 
+                    video: { facingMode: { ideal: "environment" } } 
                 });
                 
                 const videoElement = document.getElementById('video');
                 videoElement.srcObject = videoStream;
+                
+                // EXPLICITLY play the video immediately 
+                videoElement.play().catch(e => console.warn("Auto-play blocked:", e));
 
                 const track = videoStream.getVideoTracks()[0];
-                const capabilities = track.getCapabilities();
-                const zoomSlider = document.getElementById('zoom-slider');
+                
+                // CRITICAL FIX: Safely check if getCapabilities exists before calling it
+                if (typeof track.getCapabilities === 'function') {
+                    const capabilities = track.getCapabilities();
+                    const zoomSlider = document.getElementById('zoom-slider');
 
-                if (capabilities.zoom) {
-                    zoomSlider.min = capabilities.zoom.min;
-                    zoomSlider.max = capabilities.zoom.max;
-                    zoomSlider.step = capabilities.zoom.step;
-                    zoomSlider.value = capabilities.zoom.min;
-                    // Clean up old listeners before adding new ones
-                    const newSlider = zoomSlider.cloneNode(true);
-                    zoomSlider.parentNode.replaceChild(newSlider, zoomSlider);
-                    newSlider.addEventListener('input', async (e) => {
-                        await track.applyConstraints({ advanced: [{ zoom: parseFloat(e.target.value) }] });
-                    });
+                    if (capabilities && capabilities.zoom) {
+                        zoomSlider.min = capabilities.zoom.min;
+                        zoomSlider.max = capabilities.zoom.max;
+                        zoomSlider.step = capabilities.zoom.step;
+                        zoomSlider.value = capabilities.zoom.min;
+                        
+                        const newSlider = zoomSlider.cloneNode(true);
+                        zoomSlider.parentNode.replaceChild(newSlider, zoomSlider);
+                        newSlider.addEventListener('input', async (e) => {
+                            await track.applyConstraints({ advanced: [{ zoom: parseFloat(e.target.value) }] });
+                        });
+                    } else {
+                        // Hide slider if zoom is not supported
+                        document.getElementById('zoom-slider').parentElement.style.display = 'none';
+                    }
+                } else {
+                    // Hide slider if capabilities API is missing
+                    document.getElementById('zoom-slider').parentElement.style.display = 'none';
                 }
             } catch (err) {
                 console.error("Camera Error:", err);
@@ -654,7 +687,7 @@
                 const res = await fetch('/upload', { 
                     method: 'POST', 
                     headers: {'Content-Type': 'application/json'}, 
-                    body: JSON.stringify({ image: tempPhoto }) 
+                    body: JSON.stringify({ data: tempPhoto })
                 });
                 const data = await res.json();
                 
@@ -1043,7 +1076,16 @@
             document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
             document.getElementById(p + '-page').classList.add('active');
             document.getElementById('btn-' + (p === 'scanner' ? 'scan' : 'dex')).classList.add('active');
+            
             if(p === 'pokedex') renderDex();
+            
+            // NEW: If they click back to the scanner, force the video to play
+            if(p === 'scanner') {
+                const video = document.getElementById('video');
+                if (video.paused) {
+                    video.play().catch(e => console.error("Could not play video:", e));
+                }
+            }
         }
 
         function openManualPicker(del) {
@@ -1149,6 +1191,20 @@
             URL.revokeObjectURL(url);
         }
 
+        // Force the camera to wake up if the window regains focus or is tapped
+        window.addEventListener('focus', () => {
+            const video = document.getElementById('video');
+            if (video && video.paused && videoStream) {
+                video.play().catch(e => console.warn(e));
+            }
+        });
+        
+        document.body.addEventListener('click', () => {
+            const video = document.getElementById('video');
+            if (video && video.paused && videoStream) {
+                video.play().catch(e => console.warn(e));
+            }
+        });
 
         init();
     </script>
