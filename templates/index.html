@@ -296,13 +296,25 @@
                 }
 
                 // Handle Monthly Reset
-                const currentMonth = new Date().getMonth();
-                if (userProfile.lastResetMonth !== currentMonth) {
+                const now = new Date();
+                const currentYear = now.getFullYear();
+                const currentMonth = now.getMonth();
+
+                // Create a date object for the 18th of THIS month
+                let resetDateThisMonth = new Date(currentYear, currentMonth, 18);
+
+                // If today is BEFORE the 18th, the "active" reset period started on the 18th of PREVIOUS month
+                if (now < resetDateThisMonth) {
+                    resetDateThisMonth = new Date(currentYear, currentMonth - 1, 18);
+                }
+
+                // If the user's last reset happened BEFORE the start of the current period, reset them
+                if (!userProfile.lastResetTime || userProfile.lastResetTime < resetDateThisMonth.getTime()) {
                     userProfile.scanCount = 0;
-                    userProfile.lastResetMonth = currentMonth;
+                    userProfile.lastResetTime = now.getTime(); // Store as timestamp for precision
                     await db.collection('users').doc(user.uid).update({ 
                         scanCount: 0, 
-                        lastResetMonth: currentMonth 
+                        lastResetTime: userProfile.lastResetTime 
                     });
                 }
 
