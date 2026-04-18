@@ -333,13 +333,38 @@
         function updateQuotaUI() {
             if (!userProfile) return;
             
-            const scansLeft = userProfile.unlimitedAccess ? "∞" : Math.max(0, 25 - userProfile.scanCount);
-            document.getElementById('scans-left').innerText = scansLeft;
-            
-            // Calculate first day of next month
-            const now = new Date();
-            const renew = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-            document.getElementById('renew-date').innerText = renew.toLocaleDateString();
+            const quotaInfo = document.getElementById('quota-info');
+            const scansLeftEl = document.getElementById('scans-left');
+            const renewDateEl = document.getElementById('renew-date');
+
+            if (!userProfile.approved) {
+                // Replace the content with the pending message
+                quotaInfo.innerHTML = `
+                    <div style="color: var(--rotom-red); font-weight: bold; letter-spacing: 1px;">
+                        ACCOUNT PENDING APPROVAL<br>
+                        SCAN FEATURE DISABLED SORRY :(
+                    </div>
+                `;
+            } else {
+                // Restore the original structure if they are approved
+                quotaInfo.innerHTML = `
+                    <span id="scans-left">--</span> SCANS LEFT THIS MONTH<br>
+                    RENEWS ON: <span id="renew-date">--</span>
+                `;
+                
+                const scansLeft = userProfile.unlimitedAccess ? "∞" : Math.max(0, 25 - userProfile.scanCount);
+                document.getElementById('scans-left').innerText = scansLeft;
+                
+                // Calculate the NEXT 18th
+                const now = new Date();
+                let nextRenew = new Date(now.getFullYear(), now.getMonth(), 18);
+                
+                if (now >= nextRenew) {
+                    nextRenew.setMonth(nextRenew.getMonth() + 1);
+                }
+                
+                document.getElementById('renew-date').innerText = nextRenew.toLocaleDateString();
+            }
         }
 
 
