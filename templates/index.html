@@ -280,15 +280,19 @@
 
                 // Fetch User Permissions/Quota from Firestore
                 const userDoc = await db.collection('users').doc(user.uid).get();
-                
+
                 if (!userDoc.exists) {
-                    // Create pending account
+                    // NEW: Prompt for reason on first registration
+                    const reason = prompt("Please tell us why you want to use the website:");
+                    
+                    // Create pending account with the reason included
                     userProfile = {
                         approved: false,
                         unlimitedAccess: false,
                         scanCount: 0,
                         lastResetMonth: new Date().getMonth(),
-                        email: user.email
+                        email: user.email,
+                        requestReason: reason || "No reason provided" 
                     };
                     await db.collection('users').doc(user.uid).set(userProfile);
                 } else {
