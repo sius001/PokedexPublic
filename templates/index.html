@@ -278,26 +278,33 @@
                 btn.innerText = user.displayName.split(' ')[0].toUpperCase();
                 btn.classList.add('logged-in');
 
-                // Fetch User Permissions/Quota from Firestore
-                const userDoc = await db.collection('users').doc(user.uid).get();
+                // Reference to the user document
+                const userRef = db.collection('users').doc(user.uid);
+                const userDoc = await userRef.get();
 
                 if (!userDoc.exists) {
-                    // NEW: Prompt for reason on first registration
                     const reason = prompt("Please tell us why you want to use the website:");
                     
-                    // Create pending account with the reason included
                     userProfile = {
                         approved: false,
                         unlimitedAccess: false,
                         scanCount: 0,
                         lastResetMonth: new Date().getMonth(),
                         email: user.email,
-                        requestReason: reason || "No reason provided" 
+                        requestReason: reason || "No reason provided",
+                        // Set initial login time
+                        lastLogin: firebase.firestore.FieldValue.serverTimestamp() 
                     };
-                    await db.collection('users').doc(user.uid).set(userProfile);
+                    await userRef.set(userProfile);
                 } else {
                     userProfile = userDoc.data();
+                    
+                    // UPDATE: Record the last login time for existing users
+                    await userRef.update({
+                        lastLogin: firebase.firestore.FieldValue.serverTimestamp()
+                    });
                 }
+
 
                 // Handle Monthly Reset
                 const now = new Date();
