@@ -11,7 +11,7 @@ SERPAPI_KEY = os.environ.get("SERPAPI_KEY")
 IMGBB_KEY = os.environ.get("IMGBB_KEY")
 
 if not IMGBB_KEY:
-    IMGBB_KEY = "58f4278c0df1a7a54c5ae3135d115031"
+    IMGBB_KEY = "b6c8f6ebe661754a0ac9e9d7b1125950"
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # 1. LOAD LOCAL DATABASE ON STARTUP
@@ -40,7 +40,14 @@ def upload_image():
         
         # Step 1: Upload to ImgBB
         res = requests.post("https://api.imgbb.com/1/upload", {"key": IMGBB_KEY, "image": encoded_data})
-        img_url = res.json()['data']['url']
+        response_data = res.json()
+
+        # DEBUG: If 'data' isn't in the response, print what ImgBB actually said
+        if 'data' not in response_data:
+            print(f"ImgBB Error Response: {response_data}")
+            return jsonify({'error': 'ImgBB upload failed', 'details': response_data}), 400
+
+        img_url = response_data['data']['url']
 
         # Step 2: Google Lens
         client = serpapi.Client(api_key=SERPAPI_KEY)
