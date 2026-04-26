@@ -8,10 +8,10 @@ app = Flask(__name__)
 
 # --- KEYS (ENSURE THESE ARE CORRECT) ---
 SERPAPI_KEY = os.environ.get("SERPAPI_KEY")
-IMGBB_KEY = os.environ.get("IMGBB_KEY")
+FREEIMAGE_KEY = os.environ.get("FREEIMAGE_KEY")
 
-if not IMGBB_KEY:
-    IMGBB_KEY = "b6c8f6ebe661754a0ac9e9d7b1125950"
+if not FREEIMAGE_KEY:
+    FREEIMAGE_KEY = "6d207e02198a847aa98d0a2a901485a5"
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # 1. LOAD LOCAL DATABASE ON STARTUP
@@ -36,18 +36,25 @@ def get_all_pokemon():
 def upload_image():
     try:
         data = request.get_json()
-        encoded_data = data['image'].split(',', 1)[1]
+        encoded_data = data['image'].split(',', 1)[1] # Keeps your existing base64 logic
         
-        # Step 1: Upload to ImgBB
-        res = requests.post("https://api.imgbb.com/1/upload", {"key": IMGBB_KEY, "image": encoded_data})
+        # 2. Update to the FreeImage.host endpoint
+        res = requests.post(
+            "https://freeimage.host/api/1/upload", 
+            data={
+                "key": FREEIMAGE_KEY, 
+                "image": encoded_data,
+                "format": "json"
+            }
+        )
         response_data = res.json()
 
-        # DEBUG: If 'data' isn't in the response, print what ImgBB actually said
-        if 'data' not in response_data:
-            print(f"ImgBB Error Response: {response_data}")
-            return jsonify({'error': 'ImgBB upload failed', 'details': response_data}), 400
+        # 3. FreeImage.host uses ['image']['url'] instead of ['data']['url']
+        if 'image' not in response_data:
+            print(f"Upload Error: {response_data}")
+            return jsonify({'error': 'Upload failed', 'details': response_data}), 400
 
-        img_url = response_data['data']['url']
+        img_url = response_data['image']['url']
 
         # Step 2: Google Lens
         client = serpapi.Client(api_key=SERPAPI_KEY)
